@@ -17,19 +17,17 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
+package proxyauth.actions
 
-package proxyauth.actions;
-
-import proxyauth.ProxyRequest;
-
-import java.io.IOException;
+import proxyauth.ProxyRequest
+import java.io.IOException
 
 /**
  * Performs an action on a proxy request - eg. forward it
  *
  * @author Zeckie
  */
-public interface Action {
+interface Action {
     /**
      * Note, this method blocks until the action is complete.
      *
@@ -37,5 +35,5 @@ public interface Action {
      * @return the action succeeded
      * @throws IOException
      */
-    boolean action(ProxyRequest proxyRequest) throws IOException;
+    fun action(proxyRequest: ProxyRequest): Boolean
 }

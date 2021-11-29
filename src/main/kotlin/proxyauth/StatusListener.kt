@@ -17,8 +17,7 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
-
-package proxyauth;
+package proxyauth
 
 /**
  * Provides a target for threads to report when they are finished, and
@@ -26,13 +25,13 @@ package proxyauth;
  *
  * @param <A> the type of thread
  * @author Zeckie
- */
-public interface StatusListener<A extends Thread> {
+</A> */
+interface StatusListener<A : Thread> {
     /**
      * Notify the listener that this thread has finished
      *
      * @param source    the thread that has finished
      * @param succeeded was the action this thread was performing successful
      */
-    void finished(A source, boolean succeeded);
+    fun finished(source: A, succeeded: Boolean)
 }

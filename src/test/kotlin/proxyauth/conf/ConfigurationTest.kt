@@ -17,37 +17,32 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
+package proxyauth.conf
 
-package proxyauth.conf;
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 
-
-import org.junit.jupiter.api.Test;
-
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
-public class TestConfiguration {
-    Configuration config = new Configuration();
+class ConfigurationTest {
+    var config = Configuration
 
     @Test
-    public void testGetAllConfigFields() {
-        final Map<String, Setting<?>> allConfigFields = config.getAllConfigFields();
-        System.out.println(allConfigFields);
-        assertSame(allConfigFields.get("PASSWORD"), config.PASSWORD);
+    fun `get all config fields`() {
+        val allConfigFields = config.allConfigFields
+        println(allConfigFields)
+        assertSame(allConfigFields["PASSWORD"], config.PASSWORD)
     }
 
     @Test
-    public void testValidListenAddress() {
-        config.LISTEN_ADDRESS.setString("127.0.0.1");
-        assertEquals(config.LISTEN_ADDRESS.getValue(), "127.0.0.1");
+    fun `valid listen address`() {
+        config.LISTEN_ADDRESS.setString("127.0.0.1")
+        assertEquals(config.LISTEN_ADDRESS.value, "127.0.0.1")
     }
 
     @Test
-    public void testInvalidListenAddress() {
+    fun `invalid listen address`() {
         // This should not be a local address
-        assertThrows(InvalidSettingException.class, () -> config.LISTEN_ADDRESS.setString("1.1.1.1"));
+        assertFailsWith<InvalidSettingException> { config.LISTEN_ADDRESS.setString("1.1.1.1") }
     }
 }

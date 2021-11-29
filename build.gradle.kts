@@ -1,57 +1,38 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
-    java
+    kotlin("jvm") version "1.6.0"
+    id("org.jetbrains.qodana") version "0.1.12"
+    id("org.jlleitschuh.gradle.ktlint") version "10.2.0"
     id("org.jetbrains.changelog") version "1.3.1"
 }
+
+version = "1.0.0"
+group = "com.github.kotlinisland"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    implementation("org.junit.jupiter:junit-jupiter-api:5.8.1")
-    implementation("org.junit.jupiter:junit-jupiter-engine:5.8.1")
+    implementation(kotlin("reflect"))
+    testImplementation(kotlin("test"))
 }
 
 tasks.test {
     useJUnitPlatform()
 }
 
-version = "0.1.1"
-group = "com.github.zeckie"
-
-// Work out current java version
-val MIN_JAVA_VER = 9
-val fullVersion = System.getProperty("java.version")
-val majorVersion = Integer.parseInt(fullVersion.substring(0, fullVersion.indexOf('.')))
-System.out.println("Java major version: " + majorVersion)
-
-if (majorVersion < MIN_JAVA_VER) {
-    java {
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(MIN_JAVA_VER))
-        }
-    }
-} else {
-    if (majorVersion > 9) {
-        // Compile for minimum supported java version
-        // skip for java 9 due to https://bugs.openjdk.java.net/browse/JDK-8139607
-        tasks.withType<JavaCompile> {
-            options.release.set(MIN_JAVA_VER)
-        }
+"9".let {
+    kotlin.jvmToolchain {
+        (this as JavaToolchainSpec).languageVersion.set(JavaLanguageVersion.of(it))
     }
 
-    // Test on minimum supported java version
-    tasks.register<Test>("testsMinJava") {
-        javaLauncher.set(javaToolchains.launcherFor {
-            languageVersion.set(JavaLanguageVersion.of(MIN_JAVA_VER))
-        })
-    }
-    tasks.build {
-        dependsOn("testsMinJava")
+    tasks.withType<KotlinCompile> {
+        kotlinOptions.jvmTarget = it
     }
 }
 
-// set main class
 tasks.jar {
     manifest.attributes["Main-Class"] = "proxyauth.Main"
 }

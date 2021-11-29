@@ -17,23 +17,18 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
+package proxyauth.actions
 
-package proxyauth.actions;
-
-import proxyauth.ProxyRequest;
-
-import java.io.IOException;
+import proxyauth.ProxyRequest
 
 /**
  * Simple action - just close the connection
  *
  * @author Zeckie
  */
-public class CloseAction implements Action {
-
-    @Override
-    public boolean action(ProxyRequest proxyRequest) throws IOException {
-        proxyRequest.incomingSocket.close();
-        return true;
+class CloseAction : Action {
+    override fun action(proxyRequest: ProxyRequest): Boolean {
+        proxyRequest.incomingSocket.close()
+        return true
     }
 }

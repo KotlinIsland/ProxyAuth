@@ -17,165 +17,145 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
+package proxyauth.actions
 
-package proxyauth.actions;
-
-import proxyauth.PassThrough;
-import proxyauth.ProxyRequest;
-import proxyauth.StatusListener;
-
-import java.io.BufferedOutputStream;
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
-import java.util.regex.Pattern;
-
-import static proxyauth.Utils.ASCII;
-import static proxyauth.Utils.ascii;
-
+import proxyauth.ASCII
+import proxyauth.PassThrough
+import proxyauth.ProxyRequest
+import proxyauth.StatusListener
+import proxyauth.ascii
+import java.io.BufferedOutputStream
+import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.util.Base64
+import kotlin.system.exitProcess
 
 /**
  * Forwards a request to a proxy server
  *
+ * @Param proxyRequest The request being forwarded
  * @author Zeckie
  */
-public class ForwardRequest implements StatusListener<PassThrough> {
-    static final Pattern PROXY_AUTH_ERROR = Pattern.compile("^HTTP/\\d.\\d 407 .*");
-
-    private final ForwardAction action;
-    /**
-     * The request being forwarded
-     */
-    private final ProxyRequest proxyRequest;
+class ForwardRequest(
+    private val proxyRequest: ProxyRequest,
+    private val action: ForwardAction,
+) : StatusListener<PassThrough> {
     /**
      * Connection to upstream proxy server
      */
-    private Socket upstreamSocket;
-    private volatile boolean anyErrors = false;
+    private var upstreamSocket: Socket? = null
 
-    public ForwardRequest(ProxyRequest proxyRequest, ForwardAction forwardAction) {
-        this.proxyRequest = proxyRequest;
-        this.action = forwardAction;
-    }
+    @Volatile
+    private var anyErrors = false
 
     /**
      * @param headers HTTP request headers
      * @return a copy of headers, with the configured proxy authorization
      */
-    public List<String> processAuthHeaders(List<String> headers) {
-        headers = new ArrayList<String>(headers);
-        headers.removeIf(s -> s.toLowerCase().startsWith("proxy-authorization:"));
-        headers.add("Proxy-Authorization: Basic " + new String(Base64.getEncoder().encode(ascii(action.username + ":" + action.password)), ASCII));
-        return headers;
-    }
+    private fun processAuthHeaders(headers: List<String>): List<String> =
+        headers.filterNot { it.lowercase().startsWith("proxy-authorization:") } + (
+            "Proxy-Authorization: Basic " + Base64.getEncoder()
+                .encode((action.username + ":" + action.password).ascii()).toString(ASCII)
+            )
 
     /**
      * @param headers
      * @return a copy of headers, modified to stop keep-alive
      */
-    public List<String> processKeepAlive(List<String> headers) {
-        headers = new ArrayList<String>(headers);
-        headers.removeIf(s -> s.toLowerCase().startsWith("connection:"));
-        headers.removeIf(s -> s.toLowerCase().startsWith("keep-alive:"));
-        headers.add("Connection: Close");
-        return headers;
-    }
+    private fun processKeepAlive(headers: List<String>): List<String> = headers
+        .filterNot { it.lowercase().startsWith("connection:") }
+        .filterNot { it.lowercase().startsWith("keep-alive:") } + "Connection: Close"
 
-    public boolean go() throws IOException {
-        PassThrough upload;
-        PassThrough download;
-
-        try (Socket upstream = new Socket()) {
-            upstream.setSoTimeout(proxyRequest.parent.config.SOCKET_TIMEOUT.getValue());
-            upstream.connect(new InetSocketAddress(action.host, action.port), proxyRequest.parent.config.SOCKET_TIMEOUT.getValue());
-            this.upstreamSocket = upstream;
-            BufferedOutputStream outputStream = new BufferedOutputStream(upstream.getOutputStream(), proxyRequest.parent.config.BUF_SIZE.getValue());
-
-            if (proxyRequest.parent.config.DEBUG.getValue()) System.out.println("upstream socket = " + upstream);
-
-            List<String> headers = processAuthHeaders(proxyRequest.requestHeaders);
-            if (proxyRequest.parent.config.CONNECTION_CLOSE.getValue()) {
-                headers = processKeepAlive(headers);
+    fun go(): Boolean {
+        val upload: PassThrough
+        val download: PassThrough
+        val config = proxyRequest.parent.config
+        Socket().use { upstream ->
+            upstream.soTimeout = config.SOCKET_TIMEOUT.value!!
+            upstream.connect(
+                InetSocketAddress(action.host, action.port),
+                config.SOCKET_TIMEOUT.value!!
+            )
+            upstreamSocket = upstream
+            val outputStream =
+                BufferedOutputStream(upstream.getOutputStream(), config.BUF_SIZE.value!!)
+            if (config.DEBUG.value!!) println("upstream socket = $upstream")
+            var headers = processAuthHeaders(proxyRequest.requestHeaders!!)
+            if (config.CONNECTION_CLOSE.value!!) {
+                headers = processKeepAlive(headers)
             }
-            upload = new PassThrough(this, proxyRequest.incomingSocket.getInputStream(), outputStream, upstream,
-                    true, headers, proxyRequest.parent.config);
-            upload.start();
-
-            proxyRequest.responseHeaders = proxyRequest.processHeaders(upstream.getInputStream());
-
-            if (proxyRequest.parent.config.STOP_ON_PROXY_AUTH_ERROR.getValue()) {
-                final String line = proxyRequest.responseHeaders.get(0);
-                if (PROXY_AUTH_ERROR.matcher(line).matches()) {
-                    System.err.println("STOPPING due to proxy auth error: " + line);
-                    System.exit(5); //magic number 5 often = access denied
+            upload = PassThrough(
+                this, proxyRequest.incomingSocket.getInputStream(), outputStream, upstream,
+                true, headers, config
+            )
+            upload.start()
+            proxyRequest.responseHeaders = proxyRequest.processHeaders(upstream.getInputStream())
+            if (config.STOP_ON_PROXY_AUTH_ERROR.value!!) {
+                val line = proxyRequest.responseHeaders!![0]
+                if (PROXY_AUTH_ERROR matches line) {
+                    System.err.println("STOPPING due to proxy auth error: $line")
+                    exitProcess(5) // magic number 5 often = access denied
                     /*
                      * TODO: change to respond to all requests with error page,
                      * instead of quitting
                      */
                 }
             }
-
-            List<String> respHeaders = proxyRequest.responseHeaders;
-            if (proxyRequest.parent.config.CONNECTION_CLOSE.getValue()) {
-                respHeaders = processKeepAlive(respHeaders);
-            }
-
-            download = new PassThrough(
-                    this, upstream.getInputStream(),
-                    new BufferedOutputStream(
-                            proxyRequest.incomingSocket.getOutputStream(), proxyRequest.parent.config.BUF_SIZE.getValue()
-                    ),
-                    proxyRequest.incomingSocket, false, respHeaders, proxyRequest.parent.config
-            );
-
-
-            download.start();
+            val respHeaders =
+                if (config.CONNECTION_CLOSE.value!!) processKeepAlive(proxyRequest.responseHeaders!!)
+                else proxyRequest.responseHeaders
+            download = PassThrough(
+                this, upstream.getInputStream(),
+                BufferedOutputStream(
+                    proxyRequest.incomingSocket.getOutputStream(), config.BUF_SIZE.value!!
+                ),
+                proxyRequest.incomingSocket, false, respHeaders, config
+            )
+            download.start()
             try {
                 // Wait for streams to be closed
-                upload.join();
-                download.join();
-            } catch (
-                    InterruptedException e) {
-                e.printStackTrace();
+                upload.join()
+                download.join()
+            } catch (e: InterruptedException) {
+                e.printStackTrace()
             }
         }
-        synchronized (this) {
-            System.out.println(Thread.currentThread() + " Finished");
-            if (proxyRequest.parent.config.DEBUG.getValue())
-                System.out.println(
-                        "--Finished--\n"
-                                + " - any errors: " + anyErrors + "\n"
-                                + " - request: " + proxyRequest.requestHeaders.get(0) + "\n"
-                                + " - upload: " + upload.bytesTransferred.get() + "\n"
-                                + " - download: " + download.bytesTransferred.get() + "\n"
-                                + " - elapsed: " + (System.currentTimeMillis() - proxyRequest.started.getTime())
-                );
-            return !anyErrors;
+        synchronized(this) {
+            println(Thread.currentThread().toString() + " Finished")
+            if (proxyRequest.parent.config.DEBUG.value!!) println(
+                """--Finished--
+                 - any errors: $anyErrors
+                 - request: ${proxyRequest.requestHeaders!![0]}
+                 - upload: ${upload.bytesTransferred.get()}
+                 - download: ${download.bytesTransferred.get()}
+                 - elapsed: ${System.currentTimeMillis() - proxyRequest.started.time}
+                """.trimIndent()
+            )
+            return !anyErrors
         }
-
     }
 
-    @Override
-    public synchronized void finished(PassThrough obj, boolean succeeded) {
+    @Synchronized
+    override fun finished(source: PassThrough, succeeded: Boolean) {
         if (!succeeded) {
-            this.anyErrors = true;
+            anyErrors = true
 
             // Close both sockets
-            if (upstreamSocket != null) {
+            upstreamSocket?.let {
                 try {
-                    upstreamSocket.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
+                    it.close()
+                } catch (e: IOException) {
+                    e.printStackTrace()
                 }
             }
             try {
-                proxyRequest.incomingSocket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
+                proxyRequest.incomingSocket.close()
+            } catch (e: IOException) {
+                e.printStackTrace()
             }
         }
     }
 }
+
+private val PROXY_AUTH_ERROR = Regex("^HTTP/\\d.\\d 407 .*")

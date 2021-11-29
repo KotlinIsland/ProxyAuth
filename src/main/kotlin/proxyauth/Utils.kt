@@ -17,23 +17,23 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
-
-package proxyauth;
-
-
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
+package proxyauth
 
 /**
  * @author Zeckie
  */
-public class Utils {
-    public static final Charset ASCII = StandardCharsets.US_ASCII;
+val ASCII = Charsets.US_ASCII
 
-    /**
-     * Convert String to raw ascii bytes
-     */
-    public static byte[] ascii(String in) {
-        return in.getBytes(ASCII);
-    }
+/**
+ * Convert String to raw ascii bytes
+ */
+fun String.ascii(): ByteArray = toByteArray(ASCII)
+
+fun Any.notifyAll() {
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    (this as Object).notifyAll()
+}
+fun Any.wait() {
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    (this as Object).wait()
 }
