@@ -17,116 +17,87 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
+package proxyauth.conf
 
-package proxyauth.conf;
-
-import java.io.Console;
+import java.io.Console
 
 /**
  * Configuration settings.
  *
  * @author Zeckie
- */
-public class Setting<A> {
-    final A defaultValue;
-    final Converter<A> converter;
-    final String description;
-    final Comparable<A> min;
-    final Comparable<A> max;
-    final Validator validator;
-    final boolean special;
-    protected A currentValue;
-
-    /**
-     * @param defaultValue (Optional) Value that is used unless overridden by user. If null, user will be prompted for a value.
-     * @param converter    (Required) Converter to convert between Strings and the configuration's class
-     * @param special      (Required) Is this setting special (different handling for wizard, load, save)
-     * @param description  (Required) Description that is displayed to the user when prompting for a value
-     * @param validator    (Optional) Validator to check that the (user) supplied string is valid.
-     * @param min          (Optional) Minimum value - values less than this will be rejected
-     * @param max          (Optional) Maximum value - values greater than this will be rejected
-     */
-    protected Setting(A defaultValue, Converter<A> converter, boolean special, String description, Validator validator, Comparable<A> min, Comparable<A> max) {
-        this.min = min;
-        this.max = max;
-        this.validator = validator;
-        this.defaultValue = defaultValue;
-        this.converter = converter;
-        this.description = description;
-        this.special = special;
-
-        setValue(defaultValue);
-    }
+ * @param defaultValue  Value that is used unless overridden by user. If null, user will be prompted for a value.
+ * @param converter     Converter to convert between Strings and the configuration's class
+ * @param special       Is this setting special (different handling for wizard, load, save)
+ * @param description   Description that is displayed to the user when prompting for a value
+ * @param validator     Validator to check that the (user) supplied string is valid.
+ * @param min           Minimum value - values less than this will be rejected
+ * @param max           Maximum value - values greater than this will be rejected
+*/
+class Setting<A : Any>(
+    private val defaultValue: A?,
+    private val converter: Converter<A>,
+    val special: Boolean,
+    private val description: String,
+    private val validator: ((String?) -> Unit)? = null,
+    val min: Comparable<A>? = null,
+    val max: Comparable<A>? = null,
+) {
+    var currentValue: A? = null
 
     /**
      * Ask the user to supply value for the setting
      */
-    void prompt(String name, Console con) {
-        boolean isValid;
-        do {
-            String def = (currentValue != null) ? (" (press ENTER for " + converter.toString(currentValue) + ")") : "";
-            System.out.println(
-                    "\n\n" + name + ": " + description +
-                            "\n\nEnter " + name + def + ":"
-            );
-            String read = con.readLine();
+    fun prompt(name: String, con: Console) {
+        while (true) {
+            val def = if (currentValue != null) " (press ENTER for " + converter.toString(
+                currentValue!!
+            ) + ")" else ""
+            println("\n\n$name: $description\n\nEnter $name$def:")
+            val read: String = con.readLine()
 
             // Accepted current value
-            if (read.equals("") && currentValue != null) return;
-
-            isValid = true;
+            if (read == "" && currentValue != null) return
             try {
-                setString(read);
-            } catch (Exception ex) {
-                System.err.println(ex);
-                isValid = false;
+                setString(read)
+            } catch (ex: Exception) {
+                System.err.println(ex)
+                continue
             }
-
-        } while (!isValid);
+        }
     }
 
-    void setString(String s) throws InvalidSettingException {
-        if (validator != null) validator.validate(s);
-        setValue(converter.fromString(s));
+    fun setString(s: String?) {
+        validator?.invoke(s)
+        value = converter.fromString(s!!)
     }
 
     /**
      * @return the current value of this setting, or null if it has not been set
      */
-    public A getValue() {
-        return currentValue;
-    }
-
-    public void setValue(A newValue) {
-        if (min != null && min.compareTo(newValue) > 0) {
-            throw new InvalidSettingException("less than minimum (" + min + ")");
+    var value: A?
+        get() = currentValue
+        set(newValue) {
+            if (min != null && min > newValue!!) {
+                throw InvalidSettingException("less than minimum ($min)")
+            }
+            if (max != null && max < newValue!!) {
+                throw InvalidSettingException("greater than minimum ($max)")
+            }
+            currentValue = newValue
         }
-        if (max != null && max.compareTo(newValue) < 0) {
-            throw new InvalidSettingException("greater than minimum (" + max + ")");
-        }
-        this.currentValue = newValue;
+    init {
+        value = defaultValue
+    }
+    override fun toString(): String {
+        return "[Configuration val=$currentValue, default=$defaultValue, description=$description]"
     }
 
-    public String toString() {
-        return "[Configuration val=" + this.currentValue + ", default=" + this.defaultValue + ", description=" + this.description + "]";
+    fun toUserString(): String {
+        return converter.toString(currentValue!!)
     }
-
-    public String toUserString() {
-        return converter.toString(currentValue);
-    }
-
 }
 
-interface Validator {
-    void validate(String val);
-}
-
-class InvalidSettingException extends RuntimeException {
-    public InvalidSettingException(String message) {
-        super(message);
-    }
-
-    public InvalidSettingException(String message, Exception cause) {
-        super(message, cause);
-    }
+internal class InvalidSettingException : RuntimeException {
+    constructor (message: String) : super(message)
+    constructor (message: String, cause: Exception) : super(message, cause)
 }

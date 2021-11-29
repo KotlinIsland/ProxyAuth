@@ -17,184 +17,194 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
+package proxyauth.conf
 
-package proxyauth.conf;
-
-import java.io.*;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
-
+import java.io.Console
+import java.io.File
+import java.io.FileNotFoundException
+import java.io.FileReader
+import java.io.FileWriter
+import java.io.IOException
+import java.lang.reflect.Modifier
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.nio.file.Paths
+import java.util.Properties
+import kotlin.collections.HashMap
+import kotlin.io.path.notExists
 
 /**
  * Manages all user configurable settings for ProxyAuth
  *
  * @author Zeckie
  */
-public class Configuration {
-
+object Configuration {
     /* Tuning */
-    public final Setting<Integer> BUF_SIZE = new Setting<>(1024, Converter.INTEGER,
-            false, "Size of each buffer, in bytes.", null, 100, null);
-    public final Setting<Boolean> DEBUG = new Setting<>(true, Converter.YES_NO,
-            false, "Print debug details?", null, null, null);
-    public final Setting<Integer> SOCKET_TIMEOUT = new Setting<>(180000, Converter.INTEGER,
-            false, "Timeout in milliseconds used when connecting, reading and writing to TCP sockets",
-            null, 0, null);
-    public final Setting<Integer> LISTEN_BACKLOG = new Setting<>(50, Converter.INTEGER,
-            false, "Number of incoming connections that can be queued. Setting this too low will result in connections being refused",
-            null, 0, null);
-    public final Setting<Boolean> STOP_ON_PROXY_AUTH_ERROR = new Setting<>(true, Converter.YES_NO,
-            false, "Immediately stop on http error 407, to prevent account from being locked due to multiple attempts with wrong password",
-            null, null, null);
-    public final Setting<Integer> MAX_ACTIVE_REQUESTS = new Setting<>(20, Converter.INTEGER,
-            false, "The number of concurrent requests that can be processed. Higher values will use more resources.", null, 1, null);
-    public final Setting<Boolean> CONNECTION_CLOSE = new Setting<>(true, Converter.YES_NO, false,
-            "Add headers to indicate the connection needs to be closed. Should be set to Yes to work around issue 23.",
-            null, null, null);
+    val BUF_SIZE = Setting(
+        1024, Converter.INTEGER,
+        false, "Size of each buffer, in bytes.", min = 100
+    )
+    val DEBUG = Setting(
+        true, Converter.YES_NO,
+        false, "Print debug details?"
+    )
+    val SOCKET_TIMEOUT = Setting(
+        180000, Converter.INTEGER,
+        false, "Timeout in milliseconds used when connecting, reading and writing to TCP sockets",
+        min = 0,
+    )
+    val LISTEN_BACKLOG = Setting(
+        50,
+        Converter.INTEGER,
+        false,
+        "Number of incoming connections that can be queued. Setting this too low will result in connections being refused",
+        min = 0,
+    )
+    val STOP_ON_PROXY_AUTH_ERROR = Setting(
+        true,
+        Converter.YES_NO,
+        false,
+        "Immediately stop on http error 407, to prevent account from being locked due to multiple attempts with wrong password",
+    )
+    val MAX_ACTIVE_REQUESTS = Setting(
+        20,
+        Converter.INTEGER,
+        false,
+        "The number of concurrent requests that can be processed. Higher values will use more resources.",
+        min = 1,
+    )
+    val CONNECTION_CLOSE = Setting(
+        true, Converter.YES_NO, false,
+        "Add headers to indicate the connection needs to be closed. Should be set to Yes to work around issue 23.",
+    )
 
     /* Addresses */
-    public final Setting<String> LISTEN_ADDRESS = new Setting<>("127.0.0.127", Converter.STRING,
-            false, "Local IP address to listen on. Use a loopback address 127.* to make proxy only accessible to processes running locally",
-            new Validator() {
-                @Override
-                public void validate(String val) {
-                    try {
-                        // Check that the specified address is local
-                        final InetAddress addr = InetAddress.getByName(val);
-                        new ServerSocket(0, 0, addr);
-                    } catch (IOException e) {
-                        throw new InvalidSettingException("Not able to listen on specified address - " + e);
-                    }
-                }
-            }, null, null);
-    public final Setting<Integer> LISTEN_PORT = new Setting<>(8080, Converter.INTEGER,
-            false, "TCP port to listen on. Port 8080 is often used.", null, 0, 65535);
-    public final Setting<String> UPSTREAM_PROXY_HOST = new Setting<>(null, Converter.STRING,
-            false, "Name or IP address of the upstream proxy server to send requests to", null, null, null);
-    public final Setting<Integer> UPSTREAM_PROXY_PORT = new Setting<>(8080, Converter.INTEGER,
-            false, "TCP Port of upstream proxy server to send requests to", null, 1, 65535);
+    val LISTEN_ADDRESS = Setting(
+        "127.0.0.127",
+        Converter.STRING,
+        false,
+        "Local IP address to listen on. Use a loopback address 127.* to make proxy only accessible to processes running locally",
+        { value ->
+            try {
+                // Check that the specified address is local
+                ServerSocket(0, 0, InetAddress.getByName(value))
+            } catch (e: IOException) {
+                throw InvalidSettingException("Not able to listen on specified address - $e")
+            }
+        },
+    )
+    val LISTEN_PORT = Setting(
+        8080, Converter.INTEGER,
+        false, "TCP port to listen on. Port 8080 is often used.", min = 0, max = 65535
+    )
+    val UPSTREAM_PROXY_HOST = Setting(
+        null, Converter.STRING,
+        false, "Name or IP address of the upstream proxy server to send requests to"
+    )
+    val UPSTREAM_PROXY_PORT = Setting(
+        8080, Converter.INTEGER,
+        false, "TCP Port of upstream proxy server to send requests to", min = 1, max = 65535
+    )
 
     /* Authentication - these 3 are handled slightly differently */
-    public final Setting<String> USERNAME = new Setting<>(System.getenv("USERNAME"), Converter.STRING,
-            true, "Username for authenticating to upstream proxy server", null, null, null);
-    public final Setting<String> PASSWORD = new Setting<>(null, Converter.STRING,
-            true, "Password for authenticating to upstream proxy server", null, null, null);
-    public final Setting<Boolean> SAVE_PASS = new Setting<>(false, Converter.YES_NO,
-            true, "Save proxy username and password to configuration file?", null, null, null);
-
-    public final String FILE_NAME = "proxyauth.properties";
-
+    val USERNAME = Setting(
+        System.getenv("USERNAME"), Converter.STRING,
+        true, "Username for authenticating to upstream proxy server"
+    )
+    val PASSWORD = Setting(
+        null, Converter.STRING,
+        true, "Password for authenticating to upstream proxy server"
+    )
+    val SAVE_PASS = Setting(
+        false, Converter.YES_NO,
+        true, "Save proxy username and password to configuration file?"
+    )
+    val FILE_NAME = "proxyauth.properties"
 
     /**
      * Intended for internal use only, such as loading configuration.
      * Lists all configuration fields (i.e. all final fields of type Configuration)
      */
-    Map<String, Setting<?>> getAllConfigFields() {
-        Map<String, Setting<?>> allProps = new HashMap<>();
-        for (Field f : Configuration.class.getDeclaredFields()) {
-            int modifiers = f.getModifiers();
-            if (Modifier.isFinal(modifiers) && f.getType() == Setting.class) {
-                try {
-                    Setting<?> c = (Setting<?>) f.get(this);
-                    if (c == null) throw new IllegalStateException("Configuration field " + f.getName() + " is null");
-                    allProps.put(f.getName(), c);
-                } catch (IllegalAccessException e) {
-                    throw new IllegalStateException(e);
-                }
-            }
-        }
-        return allProps;
-    }
-
-    void load(boolean required) throws IOException {
-        File configFile = new File(FILE_NAME);
-        if (!configFile.exists()) {
-            if (required) {
-                throw new FileNotFoundException("Configuration file " + FILE_NAME + " not found");
-            }
-        } else {
-            Properties props = new Properties();
-            props.load(new FileReader(FILE_NAME));
-            final Map<String, Setting<?>> allConfigFields = getAllConfigFields();
-            for (String key : props.stringPropertyNames()) {
-                try {
-                    if (allConfigFields.containsKey(key)) {
-                        allConfigFields.get(key).setString(props.getProperty(key));
-                    } else {
-                        System.err.println("Discarding unknown setting from properties file: " + key);
+    val allConfigFields: Map<String, Setting<*>>
+        get() {
+            val allProps: MutableMap<String, Setting<*>> = HashMap()
+            for (f in Configuration::class.java.declaredFields) {
+                val modifiers = f.modifiers
+                if (Modifier.isFinal(modifiers) && f.type == Setting::class.java) {
+                    try {
+                        val c = f[this] as? Setting<*>
+                            ?: throw IllegalStateException("Configuration field " + f.name + " is null")
+                        allProps[f.name] = c
+                    } catch (e: IllegalAccessException) {
+                        throw IllegalStateException(e)
                     }
-                } catch (Exception ex) {
-                    System.err.println("Unable to load " + key + ": " + ex);
                 }
+            }
+            return allProps
+        }
+
+    private fun load(required: Boolean) {
+        val configFile = Paths.get(FILE_NAME)
+        if (configFile.notExists() && required) {
+            throw FileNotFoundException("Configuration file $FILE_NAME not found")
+        }
+        val props = Properties().apply { load(FileReader(FILE_NAME)) }
+        val allConfigFields = allConfigFields
+        for (key in props.stringPropertyNames()) {
+            try {
+                allConfigFields[key]?.setString(props.getProperty(key))
+                    ?: System.err.println("Discarding unknown setting from properties file: $key")
+            } catch (ex: Exception) {
+                System.err.println("Unable to load $key: $ex")
             }
         }
     }
 
-    void save() throws IOException {
-        final Map<String, Setting<?>> allConfigFields = getAllConfigFields();
-        Properties props = new Properties();
-        for (String key : allConfigFields.keySet()) {
-            final Setting<?> setting = allConfigFields.get(key);
-            final Object val = setting.currentValue;
-            if (val != null && (!setting.special || SAVE_PASS.getValue())) {
-                props.setProperty(key, setting.toUserString());
+    private fun save() {
+        val allConfigFields = allConfigFields
+        val props = Properties()
+        for ((key, setting) in allConfigFields) {
+            if (setting.currentValue != null && (!setting.special || SAVE_PASS.value!!)) {
+                props.setProperty(key, setting.toUserString())
             } else {
-                System.out.println("Skip save: " + key);
+                println("Skip save: $key")
             }
         }
-        props.store(new FileWriter(FILE_NAME), "");
+        props.store(FileWriter(FILE_NAME), "")
     }
 
-    public void init(boolean doLoad, boolean doSave, boolean doWizard, boolean quiet, Console con) throws IOException {
-        final Map<String, Setting<?>> allConfigFields = getAllConfigFields();
-
-        if (doLoad) load(false);
+    fun init(doLoad: Boolean, doSave: Boolean, doWizard: Boolean, quiet: Boolean, con: Console) {
+        val allConfigFields = allConfigFields
+        if (doLoad) load(false)
         if (!quiet) {
-            {
-                for (String key : allConfigFields.keySet()) {
-                    final Setting<?> config = allConfigFields.get(key);
+            run {
+                for ((key, config) in allConfigFields) {
                     if ((config.currentValue == null || doWizard) && !config.special) {
-                        config.prompt(key, con);
+                        config.prompt(key, con)
                     }
                 }
-
-                if (USERNAME.getValue() == null || PASSWORD.getValue() == null || doWizard) {
-                    String currentUser = USERNAME.currentValue;
+                if (USERNAME.value == null || PASSWORD.value == null || doWizard) {
+                    val currentUser = USERNAME.currentValue
                     if (currentUser == null) {
-                        System.out.println("Username:");
+                        println("Username:")
                     } else {
-                        System.out.println("Username (press ENTER for '" + currentUser + "'):");
+                        println("Username (press ENTER for '$currentUser'):")
                     }
-                    String username = con.readLine();
-                    if (username.length() == 0 && currentUser != null) {
-                        username = currentUser;
-                    }
-                    USERNAME.setValue(username);
-                    System.out.println("Password (masked)");
-                    PASSWORD.setValue(new String(con.readPassword()));
-
+                    USERNAME.value = con.readLine().ifEmpty { currentUser ?: "" }
+                    println("Password (masked)")
+                    PASSWORD.value = String(con.readPassword())
                     if (doSave) {
-                        System.out.println("Configuration file location: " + new File(FILE_NAME).getCanonicalPath());
-                        SAVE_PASS.prompt("SAVE_PASS", con);
+                        println("Configuration file location: " + File(FILE_NAME).canonicalPath)
+                        SAVE_PASS.prompt("SAVE_PASS", con)
                     }
                 }
-                if (doSave) save();
+                if (doSave) save()
             }
         }
 
-        // Check that all setting have values (eg. if running in quiet mode)
-        for (String key : allConfigFields.keySet()) {
-            if (allConfigFields.get(key).getValue() == null) {
-                throw new InvalidSettingException("Setting " + key + " is not set");
-            }
+        // Check that all setting have values (e.g. if running in quiet mode)
+        for ((key, value) in allConfigFields) {
+            value.value ?: throw InvalidSettingException("Setting $key is not set")
         }
-
     }
-
 }
-

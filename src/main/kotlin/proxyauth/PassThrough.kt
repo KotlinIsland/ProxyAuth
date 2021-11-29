@@ -17,100 +17,78 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
+package proxyauth
 
-package proxyauth;
-
-import proxyauth.conf.Configuration;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.Socket;
-import java.net.SocketException;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static proxyauth.Utils.ascii;
+import proxyauth.conf.Configuration
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.net.Socket
+import java.net.SocketException
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Transfers all bytes from input to output, flushing as required to keep things moving
  *
  * @author Zeckie
+ * Write the supplied http headers, then copy all bytes from input to output
+ *
+ * @param listener         Listener to notify when finished
+ * @param inputStream      stream to read bytes from
+ * @param os               stream to write bytes to
+ * @param toShutdownOutput socket to shut down output of when done
+ * @param isUp             direction (is this uploading?)
+ * @param headers          list of http headers
+ * @param config           configuration
  */
-public class PassThrough extends Thread {
-    public static final AtomicLong THREAD_COUNTER = new AtomicLong(0);
-    private final Socket toShutdownOutput;
-
-    InputStream is;
-    OutputStream os;
-    StatusListener<PassThrough> listener;
-    public AtomicLong bytesTransferred = new AtomicLong(0);
-    public final List<String> headers;
-    final Configuration config;
-
-    /**
-     * Write the supplied http headers, then copy all bytes from input to output
-     *
-     * @param listener         Listener to notify when finished
-     * @param is               stream to read bytes from
-     * @param os               stream to write bytes to
-     * @param toShutdownOutput (Optional) socket to shut down output of when done
-     * @param isUp             direction (is this uploading?)
-     * @param headers          list of http headers
-     * @param config           configuration
-     */
-    public PassThrough(StatusListener<PassThrough> listener, InputStream is, OutputStream os, Socket toShutdownOutput,
-                       boolean isUp, List<String> headers, Configuration config) {
-        super("PassThrough-" + THREAD_COUNTER.incrementAndGet() + (isUp ? "-up" : "-down"));
-        this.is = is;
-        this.os = os;
-        this.toShutdownOutput = toShutdownOutput;
-        this.listener = listener;
-        this.headers = headers;
-        this.config = config;
-    }
-
-    @Override
-    public void run() {
-        System.out.println(Thread.currentThread() + " Started");
-        boolean succeeded = true;
+class PassThrough(
+    var listener: StatusListener<PassThrough>,
+    var inputStream: InputStream,
+    var os: OutputStream,
+    private val toShutdownOutput: Socket?,
+    isUp: Boolean,
+    val headers: List<String>?,
+    val config: Configuration,
+) : Thread("PassThrough-" + THREAD_COUNTER.incrementAndGet() + if (isUp) "-up" else "-down") {
+    var bytesTransferred = AtomicLong(0)
+    override fun run() {
+        println(currentThread().toString() + " Started")
+        var succeeded = true
         try {
             try {
-
-                if (headers != null) {
-                    // Send the headers, followed by blank line
-                    for (String header : headers) {
-                        os.write(ascii(header + "\r\n"));
-                    }
-                    os.write(ascii("\r\n"));
-                }
+                // Send the headers, followed by blank line
+                headers?.joinToString("\r\n", postfix = "\r\n\r\n")?.ascii()?.let(os::write)
 
                 // transfer remaining bytes (eg. body)
                 while (true) {
-                    if (is.available() == 0) os.flush();
-                    int nxt = is.read();
+                    if (inputStream.available() == 0) os.flush()
+                    val nxt = inputStream.read()
                     if (nxt == -1) {
-                        if (toShutdownOutput!=null) toShutdownOutput.shutdownOutput();
-                        System.out.println(Thread.currentThread() + " Finished. Bytes=" + bytesTransferred.get());
-                        return;
+                        toShutdownOutput?.shutdownOutput()
+                        println(currentThread().toString() + " Finished. Bytes=" + bytesTransferred.get())
+                        return
                     }
-                    bytesTransferred.incrementAndGet();
-                    os.write(nxt);
+                    bytesTransferred.incrementAndGet()
+                    os.write(nxt)
                 }
-            } catch (SocketException se) {
+            } catch (se: SocketException) {
                 /* Fairly common - e.g. when either side closes the connection with TCP reset.
                     However, we need to make sure we clean up any resources, such as other sockets.
                  */
-                succeeded = false;
-                os.close();
-                is.close();
-                System.out.println(Thread.currentThread() + " SocketException -> closed. Bytes=" + bytesTransferred.get());
-                if (config.DEBUG.getValue()) se.printStackTrace();
+                succeeded = false
+                os.close()
+                inputStream.close()
+                println(currentThread().toString() + " SocketException -> closed. Bytes=" + bytesTransferred.get())
+                if (config.DEBUG.value!!) se.printStackTrace()
             }
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (e: IOException) {
+            e.printStackTrace()
         } finally {
-            listener.finished(this, succeeded);
+            listener.finished(this, succeeded)
         }
+    }
+
+    companion object {
+        val THREAD_COUNTER = AtomicLong(0)
     }
 }

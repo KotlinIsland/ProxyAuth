@@ -17,104 +17,88 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
+package proxyauth
 
-package proxyauth;
-
-import proxyauth.actions.ForwardAction;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.InetAddress;
-import java.net.Socket;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static proxyauth.Utils.ASCII;
+import proxyauth.actions.ForwardAction
+import java.io.IOException
+import java.io.InputStream
+import java.net.InetAddress
+import java.net.Socket
+import java.util.Arrays
+import java.util.Date
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Handles a single request
  *
  * @author Zeckie
  */
-public class ProxyRequest extends Thread {
-    public final Socket incomingSocket;
-    public final ProxyListener parent;
-
+class ProxyRequest(val incomingSocket: Socket, val parent: ProxyListener, threads: ThreadGroup?) :
+    Thread(threads, "ProxyRequest-" + THREAD_COUNTER.incrementAndGet()) {
     /**
      * http headers received, including the request line
      * Note that for CONNECT requests (e.g. for https connections), this will contain the
      * target hostname and port, but not much else.
      */
-    public List<String> requestHeaders;
+    var requestHeaders: List<String>? = null
 
     /**
      * http response headers received from upstream proxy, including the response line
      * Note that for CONNECT requests (e.g. for https connections), this will just be headers
      * from the proxy, not the target server
      */
-    public List<String> responseHeaders;
+    var responseHeaders: List<String>? = null
 
     /**
      * Timestamp when this request started (when the incoming connection was accepted)
      */
-    public Date started = new Date();
-
-    /**
-     * Counter to give threads unique names
-     */
-    private static final AtomicLong THREAD_COUNTER = new AtomicLong();
-
-    public ProxyRequest(Socket sock, ProxyListener proxyListener, ThreadGroup threads) {
-        super(threads, "ProxyRequest-" + THREAD_COUNTER.incrementAndGet());
-        this.incomingSocket = sock;
-        this.parent = proxyListener;
-    }
-
-    @Override
-    public void run() {
-        boolean success = false;
-        try (incomingSocket) {
-            System.out.println("Accepted connection from: " + incomingSocket.getInetAddress() + " port " + incomingSocket.getPort());
-            incomingSocket.setSoTimeout(parent.config.SOCKET_TIMEOUT.getValue());
-            requestHeaders = processHeaders(incomingSocket.getInputStream());
-
-            success = new ForwardAction(
-                    InetAddress.getByName(parent.config.UPSTREAM_PROXY_HOST.getValue()),
-                    parent.config.UPSTREAM_PROXY_PORT.getValue(),
-                    parent.config.USERNAME.getValue(), parent.config.PASSWORD.getValue()
-            ).action(this);
-
-        } catch (IOException e) {
-            e.printStackTrace();
+    var started = Date()
+    override fun run() {
+        var success = false
+        try {
+            incomingSocket.use {
+                println("Accepted connection from: ${incomingSocket.inetAddress} port ${incomingSocket.port}")
+                incomingSocket.soTimeout = parent.config.SOCKET_TIMEOUT.value!!
+                requestHeaders = processHeaders(incomingSocket.getInputStream())
+                success = ForwardAction(
+                    InetAddress.getByName(parent.config.UPSTREAM_PROXY_HOST.value),
+                    parent.config.UPSTREAM_PROXY_PORT.value!!,
+                    parent.config.USERNAME.value, parent.config.PASSWORD.value
+                ).action(this)
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
         } finally {
-            parent.finished(this, success);
+            parent.finished(this, success)
         }
     }
 
-    public List<String> processHeaders(InputStream inputStream) throws IOException {
-        final int bufferSize = parent.config.BUF_SIZE.getValue();
-        byte[] buf = new byte[bufferSize];
-        int bytes_read = 0;
+    fun processHeaders(inputStream: InputStream): List<String> {
+        val bufferSize = parent.config.BUF_SIZE.value!!
+        val buf = ByteArray(bufferSize)
+        var bytesRead = 0
 
         // read http request headers (ends with 2x CRLF)
-        final byte[] end_headers = {'\r', '\n', '\r', '\n'};
-        while (bytes_read < 4 || !Arrays.equals(buf, bytes_read - 4, bytes_read, end_headers, 0, 4)) {
-            int byte_read = inputStream.read();
-            if (byte_read == -1) throw new IOException("End of stream reached before http request headers read");
-            if (bytes_read == bufferSize)
-                throw new IOException("Buffer full before http request headers read");
-            buf[bytes_read++] = (byte) byte_read;
+        val endHeaders = "\r\n\r\n".toByteArray()
+        while (bytesRead < 4 || !Arrays.equals(buf, bytesRead - 4, bytesRead, endHeaders, 0, 4)) {
+            val byteRead = inputStream.read()
+            if (byteRead == -1) throw IOException("End of stream reached before http request headers read")
+            if (bytesRead == bufferSize) throw IOException("Buffer full before http request headers read")
+            buf[bytesRead++] = byteRead.toByte()
         }
-
-        if (parent.config.DEBUG.getValue()) {
-            System.out.println("--- Headers ---");
-            System.out.write(buf, 0, bytes_read);
-            System.out.println("--- End: Headers ---");
-            System.out.flush();
+        if (parent.config.DEBUG.value!!) {
+            println("--- Headers ---")
+            System.out.write(buf, 0, bytesRead)
+            println("--- End: Headers ---")
+            System.out.flush()
         }
+        return String(buf, 0, bytesRead, ASCII).trim().split("\r\n").toMutableList()
+    }
 
-        return Arrays.asList(new String(buf, 0, bytes_read, ASCII).split("\r\n"));
+    companion object {
+        /**
+         * Counter to give threads unique names
+         */
+        private val THREAD_COUNTER = AtomicLong()
     }
 }

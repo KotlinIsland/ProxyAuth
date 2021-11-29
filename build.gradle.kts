@@ -1,85 +1,32 @@
-/*
- * This file is part of ProxyAuth - https://github.com/Zeckie/ProxyAuth
- * ProxyAuth is Copyright (c) 2021 Zeckie
- *
- * ProxyAuth is free software: you can redistribute it and/or modify it under
- * the terms of the GNU General Public License as published by the Free
- * Software Foundation, version 3.
- *
- * ProxyAuth is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- *  for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with ProxyAuth. If you have the source code, this is in a file called
- * LICENSE. If you have the built jar file, the licence can be viewed by
- * running "java -jar ProxyAuth-<version>.jar licence".
- * Otherwise, see <https://www.gnu.org/licenses/>.
- */
-
-import java.util.regex.Matcher
-import java.util.regex.Pattern
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    java
+    kotlin("jvm") version "1.6.0"
+    id("org.jetbrains.qodana") version "0.1.12"
+    id("org.jlleitschuh.gradle.ktlint") version "10.2.0"
     id("org.jetbrains.changelog") version "1.3.1"
 }
+
+version = "1.0.0"
+group = "com.github.kotlinisland"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testImplementation(platform("org.junit:junit-bom:5.8.2"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
+    implementation(kotlin("reflect"))
+    testImplementation(kotlin("test"))
 }
 
-tasks.withType<Test> {
-    useJUnitPlatform() // JUnit 5
+tasks.test {
+    useJUnitPlatform()
 }
 
-version = "0.1.1"
-group = "com.github.zeckie"
-
-/*
-* Work out current java version
-* Note: versions prior to JEP223 (Java 9) had version numbers starting with "1." so
-* will be counted as major version 1.
-*/
-@Suppress("PropertyName") // IDEA doesn't recognise MIN_JAVA_VER as a constant
-val MIN_JAVA_VER = 9
-val fullVersion: String = System.getProperty("java.version")
-val matchMajor: Matcher = Pattern.compile("^\\d+").matcher(fullVersion)
-val majorVersion = if (matchMajor.find()) Integer.parseInt(matchMajor.group()) else 0
-
-if (majorVersion < MIN_JAVA_VER) {
-    println("Using java toolchain, as java version ($fullVersion) is less than minimum ($MIN_JAVA_VER)")
-    java.toolchain.languageVersion.set(JavaLanguageVersion.of(MIN_JAVA_VER))
-} else {
-    if (majorVersion > 9) {
-        // Compile for minimum supported java version
-        // skip for java 9 due to https://bugs.openjdk.java.net/browse/JDK-8139607
-        tasks.withType<JavaCompile> {
-            options.release.set(MIN_JAVA_VER)
-        }
-    }
-
-    // Test on minimum supported java version
-    tasks.register<Test>("testsMinJava") {
-        description = "Run test suite with ${project.name}'s minimum supported java version ($MIN_JAVA_VER). " +
-                "Checks that the code is compatible with, and compiled with the correct options to be run on that version"
-        group = "verification"
-        javaLauncher.set(javaToolchains.launcherFor {
-            languageVersion.set(JavaLanguageVersion.of(MIN_JAVA_VER))
-        })
-    }
-    tasks.check {
-        dependsOn("testsMinJava")
-    }
+kotlin.jvmToolchain {
+    (this as JavaToolchainSpec).languageVersion.set(JavaLanguageVersion.of(9))
 }
 
-// set main class
 tasks.jar {
     manifest.attributes["Main-Class"] = "proxyauth.Main"
 }

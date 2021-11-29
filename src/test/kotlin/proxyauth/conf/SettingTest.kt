@@ -17,17 +17,38 @@
  * running "java -jar ProxyAuth-<version>.jar licence".
  * Otherwise, see <https://www.gnu.org/licenses/>.
  */
-package proxyauth.actions
+package proxyauth.conf
 
-import proxyauth.ProxyRequest
-import java.net.InetAddress
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 /**
- * Forwards the request to another proxy server
- *
  * @author Zeckie
  */
-class ForwardAction(val host: InetAddress, val port: Int, val username: String?, val password: String?) : Action {
-    override fun action(proxyRequest: ProxyRequest): Boolean =
-        ForwardRequest(proxyRequest, this).go()
+class SettingTest {
+    @Test
+    fun `setting int`() {
+        val setting = Setting(5, Converter.INTEGER, false, "Test number", null, 0, 100)
+        assertEquals(setting.currentValue as Int, 5)
+        setting.setString("3")
+        assertEquals(setting.currentValue as Int, 3)
+        assertEquals("3", setting.toUserString())
+    }
+
+    @Test
+    fun `invalid int`() {
+        assertFailsWith<InvalidSettingException> {
+            val setting = Setting(5, Converter.INTEGER, false, "Test number", min = 0, max = 100)
+            setting.setString("Foo")
+        }
+    }
+
+    @Test
+    fun `invalid yes no`() {
+        assertFailsWith<InvalidSettingException> {
+            val setting = Setting(null, Converter.YES_NO, false, "Test bool")
+            setting.setString("Foo")
+        }
+    }
 }
