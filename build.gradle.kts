@@ -27,6 +27,10 @@ kotlin.jvmToolchain {
     (this as JavaToolchainSpec).languageVersion.set(JavaLanguageVersion.of(9))
 }
 
+sourceSets.main.configure {
+    resources.include("LICENCE")
+}
+
 tasks.jar {
     manifest.attributes["Main-Class"] = "proxyauth.Main"
 }
