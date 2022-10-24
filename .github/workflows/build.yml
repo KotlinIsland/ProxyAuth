@@ -51,7 +51,7 @@ jobs:
 
       # Store test report an artifact for downloading
       - name: Upload Test Report
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3.1.1
         with:
           name: Test Report
           path: ./build/reports/tests/
@@ -63,7 +63,7 @@ jobs:
           save-html-report: true
 
       - name: Upload Qodana Report
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3.1.1
         with:
           name: Qodana Report
           path: "${{ github.workspace }}/qodana/report/*"
@@ -116,7 +116,7 @@ jobs:
 
       # Store built jar as an artifact for downloading
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3.1.1
         with:
           name: "${{ steps.properties.outputs.name }} - ${{ steps.properties.outputs.version }}"
           path: ./build/libs/*
@@ -124,7 +124,7 @@ jobs:
       # Store test reports as an artifact
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3.1.1
         with:
           name: "test-reports"
           path: ./build/reports/*
